@@ -1,0 +1,2 @@
+class UnknownArgumentException(BaseException):
+    pass
