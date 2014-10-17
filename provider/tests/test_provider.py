@@ -32,6 +32,17 @@ def test_provider_register_uncallable(provider, thing):
         provider.register(thing)
 
 
+def test_provider_register_callable_class(provider):
+    class Test(object):
+
+        def __call__(self):
+            return 1
+    provider.register(Test())
+
+    assert provider.has('Test')
+    assert provider.get('Test') == 1
+
+
 def test_provider_get(provider):
     def abc():
         return 1
@@ -105,6 +116,22 @@ def test_apply_call(provider):
     # Missing keyword argument
     with pytest.raises(UnknownArgumentException):
         provider.call(with_args, 'something')
+
+
+def test_apply_call_class(provider):
+    def abc():
+        return 123
+
+    class Something(object):
+        def __call__(self, abc):
+            self.test(abc)
+
+        def test(self, abc):
+            assert abc == 123
+
+    provider.register(abc)
+    provider.call(Something())
+    provider.call(Something().test)
 
 
 def test_dependency(provider):
