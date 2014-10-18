@@ -8,9 +8,36 @@ from provider.exceptions import UnknownArgumentException
 
 class Item(object):
 
-    def __init__(self, callable, klass=False):
+    def __init__(self, callable, name, klass=False, deps=None):
+        if not deps:
+            deps = set()
         self.callable = callable
+        self.name = name
         self.klass = klass
+        self.deps = deps
+
+    @staticmethod
+    def create_from(thing):
+        if not hasattr(thing, '__call__'):
+            raise ValueError("Not a callable.")
+
+        # Figure out what this thing is: function, class instance or bound method?
+        name = getattr(thing, '__name__', '')
+        if inspect.ismethod(thing):
+            klass = True
+        elif inspect.isfunction(thing):
+            klass = False
+        elif not inspect.isfunction(thing) and inspect.isclass(type(thing)):
+            klass = True
+            name = thing.__class__.__name__
+            thing = thing.__call__
+
+        # Get dependencies
+        deps = inspect.getargspec(thing).args
+        if klass:
+            deps.remove('self')
+
+        return Item(thing, name, klass, deps)
 
 
 class Provider(object):
@@ -20,31 +47,16 @@ class Provider(object):
         self._cache = dict()
 
     def register(self, thing, name=None):
-        # Can only register a callable
-        if not hasattr(thing, '__call__'):
-            raise ValueError("Not a callable.")
-
-        # Is this a class instance?
-        klass = not inspect.isfunction(thing) and inspect.isclass(type(thing))
-
-        # Use object name if implied
+        item = Item.create_from(thing)
         if not name:
-            if not klass:
-                name = thing.__name__
-            else:
-                name = thing.__class__.__name__
+            name = item.name
 
-        if klass:
-            thing = thing.__call__
-
-        # Make sure we have its dependencies
-        for dep in inspect.getargspec(thing).args:
-            if klass and dep == 'self':
-                continue
+        # Validate dependencies
+        for dep in item.deps:
             if not self.has(dep):
-                raise UnknownArgumentException("Provider depends on unknown provider '{}'.".format(dep))
+                raise UnknownArgumentException("Unknown dependency '{}'.".format(dep))
 
-        self._registry[name] = Item(thing, klass)
+        self._registry[name] = item
 
     def has(self, name):
         return name in self._registry
@@ -65,8 +77,26 @@ class Provider(object):
         if not package:
             package = caller_package()
 
-        scanner = venusian.Scanner(provider=self)
+        # Scan for decorated providers
+        provider = set()
+        scanner = venusian.Scanner(provider=provider)
         scanner.scan(package=package, categories=['provider'])
+
+        items = [Item.create_from(thing) for thing in provider]
+        names = [item.name for item in items]
+        items = {item.name: item for item in items}
+
+        # Validate and register each item
+        for name, item in items.items():
+            for dep in item.deps:
+                if not dep in names:
+                    raise UnknownArgumentException("Unknown dependency '{}'.".format(dep))
+
+                # Make sure this is not a circular dependency
+                if dep == name or name in items[dep].deps:
+                    raise UnknownArgumentException("Circular dependency '{}'".format(dep))
+
+            self._registry[name] = item
 
     def call(self, function, *args, **kwargs):
         klass = False

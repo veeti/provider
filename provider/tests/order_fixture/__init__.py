@@ -1,0 +1,1 @@
+"""A test fixture for order-independent provider scanning."""
