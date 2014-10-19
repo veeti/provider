@@ -175,7 +175,7 @@ def test_dependency(provider):
     assert provider.get('two') == 2
 
 
-def test_apply_unsatisfied_dependency(provider):
+def test_unsatisfied_dependency(provider):
     def test(abc):
         pass
 
