@@ -99,15 +99,8 @@ class Provider(object):
             self._registry[name] = item
 
     def call(self, function, *args, **kwargs):
-        klass = False
-
-        if inspect.ismethod(function):
-            klass = True
-        elif not inspect.isfunction(function) and inspect.isclass(type(function)):
-            klass = True
-            function = function.__call__
-
-        return self._call(function, klass, *args, **kwargs)
+        item = Item.create_from(function)
+        return self._call(item.callable, item.klass, *args, **kwargs)
 
     def _call(self, function, klass=False, *args, **_kwargs):
         kwargs = dict()
